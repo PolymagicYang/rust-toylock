@@ -1,4 +1,4 @@
-use std::{sync::{atomic::{ AtomicBool, Ordering }, Arc}, ops::{Deref, DerefMut}, cell::UnsafeCell};
+use std::{sync::{atomic::{ AtomicBool, Ordering }, Arc}, ops::{Deref, DerefMut}, cell::UnsafeCell, thread::spawn};
 // 自旋锁：持有锁的线程不断查看是否有其他线程在使用锁。
 
 // 因为数据本身是可传递和同步的，所以锁也应该是可传递和可同步的。
@@ -63,12 +63,14 @@ impl<'a, T: Send + Sync> DerefMut for LockGuard<'a, T> {
 #[test]
 fn test() {
 	let test: &'static SpinLock<_> = Box::leak(Box::new(SpinLock::new(0)));
-	for _ in 0..10 {
-		std::thread::spawn(move || {
-			let mut guard = test.lock();
-			*guard += 1;
-			guard.unlock();
-		});
-	}
+	let _joins: Vec<_> = (0..10)
+		.map(|_| {
+			spawn(move || {
+				let mut test = test.lock();
+				*test += 1;
+				test.unlock();				
+			}).join().unwrap();
+		}).collect();
+
 	println!("{}", test.lock().data);
 }
