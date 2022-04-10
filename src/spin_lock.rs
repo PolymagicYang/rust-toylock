@@ -1,4 +1,7 @@
+//! A insufficient lock.
+
 use std::{sync::{atomic::{ AtomicBool, Ordering }, Arc}, ops::{Deref, DerefMut}, cell::UnsafeCell};
+
 // 自旋锁：持有锁的线程不断查看是否有其他线程在使用锁。
 
 // 因为数据本身是可传递和同步的，所以锁也应该是可传递和可同步的。
