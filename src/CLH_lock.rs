@@ -1,7 +1,7 @@
 //! A linked-list like lock. 
 
 use crate::{Lock, Guard};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{ AtomicBool, AtomicPtr, Ordering };
 /// A CLH lock consists of many nodes linearly linked together. 
 ///
 /// Each working thread can hold one of the nodes to enable data & control synchronizations. 
@@ -17,26 +17,50 @@ use std::sync::atomic::AtomicBool;
 /// 4. After threads 1 complete its job, thread 2 can start its job because the thread 1 will change its node to unlocked, which
 /// is the previous node of thread 2. From that, the threads hold the following nodes can get the lock sequentially.
 pub struct CLHLock {
-    
+    prev: AtomicPtr<Node>,
 }
 
-struct Token {
+struct Node {
+    is_locked: AtomicBool, 
 }
 
-pub struct LockGuard<'a, T: Send + Sync> {
+impl Default for Node {
+    fn default() -> Self {
+        Node { is_locked: AtomicBool::new(true) }
+    }    
+}
+
+pub struct LockGuard<T: Send + Sync> {
     data: *mut T, 
-    lock: &'a CLHLock,
+    lock: *mut Node,
 }
 
-impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
+impl<T: Send + Sync> LockGuard<T> {
+    fn new(data: *mut T, lock: *mut Node) -> Self {
+        LockGuard {
+            data,
+            lock
+        } 
+    }
+}
+
+impl<'a, T: Send + Sync> Guard for LockGuard<T> {
     fn unlock(&self) {
         
     }
 }
 
 impl<'a, T: Send + Sync> Lock<'a, T> for CLHLock {
-    type L = LockGuard<'a, T>;
+    type L = LockGuard<T>;
     fn lock(&self) -> Self::L {
-             
+        let curr = Box::into_raw(Box::new(Node::default()));
+        // Ordering relaxed is accepable, because read-modify-write is message adjancy operation.
+        let prev = self.prev.swap(curr, Ordering::Relaxed);
+
+        let a = unsafe { Box::from_raw(prev) };
+        while a.as_ref().is_locked.get_mut().clone() {
+            
+        }
+        LockGuard::new()
     }
 }
