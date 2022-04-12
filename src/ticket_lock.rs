@@ -36,7 +36,7 @@ pub struct LockGuard<'a, T> {
 }
 
 impl<'a, T: Send + Sync> LockGuard<'a, T> {
-	fn unlock(&self) {
+	pub fn unlock(&self) {
 		// invariance: only one thread holds the lock.
 		// Release: make all the varables modified be visible from other threads.
 		// or: updates the per-message view.
@@ -45,7 +45,7 @@ impl<'a, T: Send + Sync> LockGuard<'a, T> {
 }
 
 impl<'a, T: Send + Sync> TicketLock<T> {
-	fn lock(&'a self) -> LockGuard<'a, T> {
+	pub fn lock(&'a self) -> LockGuard<'a, T> {
 		// fetch and add is message view (adjacent message), Ordering doesn't matter.
 		let curr = self.lock.ticket_num.fetch_add(1, Ordering::Relaxed);
 
@@ -85,7 +85,7 @@ impl Ticket {
 }
 
 impl<T: Send + Sync> TicketLock<T> {
-	fn new(data: T) -> Self {
+	pub fn new(data: T) -> Self {
 		TicketLock { 
 			data: UnsafeCell::new(data), 
 			lock: Ticket::new() 
