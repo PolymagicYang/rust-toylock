@@ -7,18 +7,15 @@ use std::{sync::{atomic::{ AtomicBool, Ordering }, Arc}, ops::{Deref, DerefMut},
 // 因为数据本身是可传递和同步的，所以锁也应该是可传递和可同步的。
 unsafe impl<T: Send + Sync> Send for SpinLock<T> {}
 unsafe impl<T: Send + Sync> Sync for SpinLock<T> {}
-
-#[derive(Debug)]
-struct RawLock {
-	is_hold: AtomicBool,
-}
-
-// 特别声明一个生命周期，确保锁保护的数据不会存活在锁的周期以外.
-// T 必须可以被所有线程访问，或被发往别的线程.
 #[derive(Debug)]
 pub struct LockGuard<'a, T: Send + Sync> {
 	data: &'a mut T,
 	lock: &'a RawLock,
+}
+
+#[derive(Debug)]
+struct RawLock {
+	is_hold: AtomicBool,
 }
 
 pub struct SpinLock<T: Send + Sync> {
