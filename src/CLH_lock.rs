@@ -1,7 +1,7 @@
 //! A linked-list like lock. 
 
 use crate::{Lock, Guard};
-use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell};
+use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell, thread, ops::{Deref, DerefMut}};
 /// A CLH lock consists of many nodes linearly linked together. 
 ///
 /// Each working thread can hold one of the nodes to enable data & control synchronizations. 
@@ -17,7 +17,7 @@ use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell};
 /// 4. After threads 1 complete its job, thread 2 can start its job because the thread 1 will change its node to unlocked, which
 /// is the previous node of thread 2. From that, the threads hold the following nodes can get the lock sequentially.
 pub struct CLHLock<T: Send + Sync> {
-    prev: AtomicPtr<Node>,
+    prev: NodePtr,
     data: UnsafeCell<T>,
 }
 
@@ -25,19 +25,27 @@ struct Node {
     is_locked: AtomicBool, 
 }
 
+type NodePtr = AtomicPtr<Node>;
+
 impl Default for Node {
     fn default() -> Self {
         Node { is_locked: AtomicBool::new(true) }
     }    
 }
 
-pub struct LockGuard<T: Send + Sync> {
-    data: *mut T, 
+impl Node {
+    fn new() -> Self {
+        Node { is_locked: AtomicBool::new(false) } 
+    } 
+}
+
+pub struct LockGuard<'a, T: Send + Sync> {
+    data: &'a mut T, 
     lock: *mut Node,
 }
 
-impl<T: Send + Sync> LockGuard<T> {
-    fn new(data: *mut T, lock: *mut Node) -> Self {
+impl<'a, T: Send + Sync> LockGuard<'a, T> {
+    fn new(data: &'a mut T, lock: *mut Node) -> Self {
         LockGuard {
             data,
             lock
@@ -45,25 +53,69 @@ impl<T: Send + Sync> LockGuard<T> {
     }
 }
 
-impl<'a, T: Send + Sync> Guard for LockGuard<T> {
+impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
-        
+        let curr = unsafe { Box::from_raw(self.lock) };
+        curr.is_locked.store(false, Ordering::Release);
     }
 }
 
-impl<'a, T: Send + Sync> Lock<'a, T> for CLHLock<T> {
-    type L = LockGuard<T>;
+impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
+    type L = LockGuard<'a, T>;
     fn lock(&self) -> Self::L {
         let curr = Box::into_raw(Box::new(Node::default()));
         // Ordering relaxed is accepable, because read-modify-write is message adjancy operation.
         let prev = self.prev.swap(curr, Ordering::Relaxed);
 
-        let a = unsafe { Box::from_raw(prev) };
-        while a.is_locked.load(Ordering::Acquire) {
+        let prev = unsafe { Box::from_raw(prev) };
+        while prev.is_locked.load(Ordering::Acquire) {
             // Make sure previous node's lock is released.
             // Ordering::Acquire is required after other threads release the lock and change the value in node.
-            todo!("sleep for a while");
+            // todo!("sleep for a while");
         }
-        LockGuard::new(self.data.get(), curr)
+        
+        // Let the current node cleanup the previous node.
+        drop(prev);
+        LockGuard::new(unsafe {&mut *self.data.get()}, curr)
     }
+}
+
+impl<T: Send + Sync> CLHLock<T> {
+    fn new(data: T) -> Self {
+        let node_ptr = Box::into_raw(Box::new(Node::new()));
+        CLHLock { prev: AtomicPtr::new(node_ptr), data: UnsafeCell::new(data) }
+    }
+}
+
+impl<'a, T: Send + Sync> Deref for LockGuard<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.data 
+    } 
+}
+
+impl<'a, T: Send + Sync> DerefMut for LockGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.data 
+    } 
+}
+
+unsafe impl<T: Send + Sync> Send for CLHLock<T> {}
+unsafe impl<T: Send + Sync> Sync for CLHLock<T> {}
+
+#[test]
+fn test() {
+    let test: &'static CLHLock<Vec<i32>> = Box::leak(Box::new(CLHLock::new(vec![])));
+	let _joins: Vec<_> = (1..100)
+		.map(|x| {
+			thread::spawn(move || {
+				let mut a = test.lock();
+				a.push(x);
+				a.unlock();	
+			})
+			.join()
+			.unwrap();
+	}).collect();
+	println!("{:?}", *test.lock());
+	// done!
 }
