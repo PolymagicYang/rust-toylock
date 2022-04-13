@@ -1,7 +1,7 @@
 //! A linked-list like lock. 
 
 use crate::{Lock, Guard};
-use std::sync::atomic::{ AtomicBool, AtomicPtr, Ordering };
+use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell};
 /// A CLH lock consists of many nodes linearly linked together. 
 ///
 /// Each working thread can hold one of the nodes to enable data & control synchronizations. 
@@ -16,8 +16,9 @@ use std::sync::atomic::{ AtomicBool, AtomicPtr, Ordering };
 /// Thread 2 will see that the previous node shows locked because thread one doesn't complete its job.
 /// 4. After threads 1 complete its job, thread 2 can start its job because the thread 1 will change its node to unlocked, which
 /// is the previous node of thread 2. From that, the threads hold the following nodes can get the lock sequentially.
-pub struct CLHLock {
+pub struct CLHLock<T: Send + Sync> {
     prev: AtomicPtr<Node>,
+    data: UnsafeCell<T>,
 }
 
 struct Node {
@@ -50,7 +51,7 @@ impl<'a, T: Send + Sync> Guard for LockGuard<T> {
     }
 }
 
-impl<'a, T: Send + Sync> Lock<'a, T> for CLHLock {
+impl<'a, T: Send + Sync> Lock<'a, T> for CLHLock<T> {
     type L = LockGuard<T>;
     fn lock(&self) -> Self::L {
         let curr = Box::into_raw(Box::new(Node::default()));
@@ -58,9 +59,11 @@ impl<'a, T: Send + Sync> Lock<'a, T> for CLHLock {
         let prev = self.prev.swap(curr, Ordering::Relaxed);
 
         let a = unsafe { Box::from_raw(prev) };
-        while a.as_ref().is_locked.get_mut().clone() {
-            
+        while a.is_locked.load(Ordering::Acquire) {
+            // Make sure previous node's lock is released.
+            // Ordering::Acquire is required after other threads release the lock and change the value in node.
+            todo!("sleep for a while");
         }
-        LockGuard::new()
+        LockGuard::new(self.data.get(), curr)
     }
 }
