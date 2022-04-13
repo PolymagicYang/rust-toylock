@@ -105,9 +105,11 @@ fn test() {
 				a.push(x);
 				a.unlock();	
 			})
-			.join()
-			.unwrap();
+	})
+	.map(|x| {
+		x.join()
 	}).collect();
+    
 	println!("{:?}", *test.lock());
 	// done!
 }

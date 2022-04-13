@@ -57,6 +57,7 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr = unsafe { Box::from_raw(self.lock) };
         curr.is_locked.store(false, Ordering::Release);
+        println!("unlock addr: {:?}", self.lock);
     }
 }
 
@@ -65,9 +66,10 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
     fn lock(&self) -> Self::L {
         let curr = Box::into_raw(Box::new(Node::default()));
         // Ordering relaxed is accepable, because read-modify-write is message adjancy operation.
-        let prev = self.prev.swap(curr, Ordering::Relaxed);
+        let prev_ptr = self.prev.swap(curr, Ordering::Relaxed);
 
-        let prev = unsafe { Box::from_raw(prev) };
+        let prev = unsafe { Box::from_raw(prev_ptr) };
+        println!("unlock addr: {:?}", prev_ptr);
         while prev.is_locked.load(Ordering::Acquire) {
             // Make sure previous node's lock is released.
             // Ordering::Acquire is required after other threads release the lock and change the value in node.
@@ -75,7 +77,6 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
         }
         
         // Let the current node cleanup the previous node.
-        drop(prev);
         LockGuard::new(unsafe {&mut *self.data.get()}, curr)
     }
 }
@@ -111,6 +112,7 @@ fn test() {
 			thread::spawn(move || {
 				let mut a = test.lock();
 				a.push(x);
+                let ptr = unsafe {&* test.prev.load(Ordering::Relaxed)};
 				a.unlock();	
 			})
 			.join()
@@ -118,4 +120,13 @@ fn test() {
 	}).collect();
 	println!("{:?}", *test.lock());
 	// done!
+}
+
+#[test]
+fn test2() {
+    let a = Box::into_raw(Box::new(2));
+    println!("{:?}", a);
+    let mut c = unsafe { Box::from_raw(a) };
+    let b = Box::into_raw(unsafe {Box::from_raw(a)});
+    *c = 3;
 }
