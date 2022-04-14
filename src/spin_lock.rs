@@ -32,7 +32,6 @@ impl<T: Send + Sync> SpinLock<T> {
 impl<'a, T: Send + Sync + Copy> SpinLock<T> {
 	pub fn lock(&'a self) -> LockGuard<'a, T> {
 		while self.lock.is_hold.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire).is_err() {
-
 		}
 		LockGuard::<'a, _> { 
 			data: unsafe { &mut *self.data.get() as &mut T }, 

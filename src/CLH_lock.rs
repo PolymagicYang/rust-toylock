@@ -73,7 +73,7 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
         while prev.is_locked.load(Ordering::Acquire) {
             // Make sure previous node's lock is released.
             // Ordering::Acquire is required after other threads release the lock and change the value in node.
-            // todo!("sleep for a while");
+            todo!("sleep for a while");
         }
         
         // Let the current node cleanup the previous node.
@@ -124,6 +124,7 @@ fn test() {
 
 #[test]
 fn test2() {
+    vec![1, 2, 3].sort_unstable();
     let a = Box::into_raw(Box::new(2));
     println!("{:?}", a);
     let mut c = unsafe { Box::from_raw(a) };
