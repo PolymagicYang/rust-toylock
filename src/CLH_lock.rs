@@ -1,7 +1,7 @@
 //! A linked-list like lock. 
 
 use crate::{Lock, Guard};
-use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell, thread, ops::{Deref, DerefMut}};
+use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell, thread, ops::{Deref, DerefMut}, time::Duration};
 /// A CLH lock consists of many nodes linearly linked together. 
 ///
 /// Each working thread can hold one of the nodes to enable data & control synchronizations. 
@@ -57,7 +57,7 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr = unsafe { Box::from_raw(self.lock) };
         curr.is_locked.store(false, Ordering::Release);
-        println!("unlock addr: {:?}", self.lock);
+        Box::into_raw(curr);
     }
 }
 
@@ -69,11 +69,9 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
         let prev_ptr = self.prev.swap(curr, Ordering::Relaxed);
 
         let prev = unsafe { Box::from_raw(prev_ptr) };
-        println!("unlock addr: {:?}", prev_ptr);
         while prev.is_locked.load(Ordering::Acquire) {
             // Make sure previous node's lock is released.
             // Ordering::Acquire is required after other threads release the lock and change the value in node.
-            todo!("sleep for a while");
         }
         
         // Let the current node cleanup the previous node.
@@ -107,27 +105,36 @@ unsafe impl<T: Send + Sync> Sync for CLHLock<T> {}
 #[test]
 fn test() {
     let test: &'static CLHLock<Vec<i32>> = Box::leak(Box::new(CLHLock::new(vec![])));
-	let _joins: Vec<_> = (1..100)
+	let joins: Vec<_> = (1..100)
 		.map(|x| {
 			thread::spawn(move || {
 				let mut a = test.lock();
 				a.push(x);
-                let ptr = unsafe {&* test.prev.load(Ordering::Relaxed)};
 				a.unlock();	
 			})
-			.join()
-			.unwrap();
 	}).collect();
-	println!("{:?}", *test.lock());
+    
+    let _: Vec<_> = joins.into_iter().map(|x| {
+        x.join().unwrap();
+    }).collect();
 	// done!
+    // 
+    println!("{:?}", *test.lock());
 }
 
 #[test]
-fn test2() {
-    vec![1, 2, 3].sort_unstable();
-    let a = Box::into_raw(Box::new(2));
-    println!("{:?}", a);
-    let mut c = unsafe { Box::from_raw(a) };
-    let b = Box::into_raw(unsafe {Box::from_raw(a)});
-    *c = 3;
+fn test1() {
+    let test: &'static CLHLock<Vec<i32>> = Box::leak(Box::new(CLHLock::new(vec![])));
+	let joins: Vec<_> = (1..100)
+		.map(|x| {
+			thread::spawn(move || {
+				let mut a = test.lock();
+				a.push(x);
+				a.unlock();	
+			})
+	}).collect();
+    
+    thread::sleep(Duration::from_millis(100));
+    // 
+    println!("{:?}", *test.lock());
 }
