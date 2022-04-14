@@ -7,7 +7,7 @@
 //     when current == ticket_num => thread holds the lock
 //     unlock => (fetch and increment) the current.
 
-use std::{sync::atomic::{AtomicUsize, Ordering}, cell::UnsafeCell, ops::DerefMut, thread};
+use std::{sync::atomic::{AtomicUsize, Ordering}, cell::UnsafeCell, ops::DerefMut, thread::{self, JoinHandle}, time::Duration};
 use core::ops::Deref;
 
 unsafe impl<T: Send + Sync> Send for TicketLock<T> {}
@@ -40,7 +40,7 @@ impl<'a, T: Send + Sync> LockGuard<'a, T> {
 		// invariance: only one thread holds the lock.
 		// Release: make all the varables modified be visible from other threads.
 		// or: updates the per-message view.
-		self.lock.current.fetch_add(1, Ordering::Release);
+		self.lock.current.store(self.lock.current.load(Ordering::Acquire) + 1, Ordering::Release);
 	}
 }
 
@@ -49,9 +49,7 @@ impl<'a, T: Send + Sync> TicketLock<T> {
 		// fetch and add is message view (adjacent message), Ordering doesn't matter.
 		let curr = self.lock.ticket_num.fetch_add(1, Ordering::Relaxed);
 
-		while curr != self.lock.current.load(Ordering::Acquire) {
-			todo!("sleep or backoff")	
-		};
+		while curr != self.lock.current.load(Ordering::Acquire) {};
 
 		LockGuard { 
 			data: self.data.get(), 
@@ -98,17 +96,17 @@ impl<T: Send + Sync> TicketLock<T> {
 fn test() {
 	// leak: get static lifetime reference.
 	let test: &'static TicketLock<Vec<i32>> = Box::leak(Box::new(TicketLock::new(vec![])));
-	let _joins: Vec<_> = (1..100)
+	let joins: Vec<_> = (1..100)
 		.map(|x| {
 			thread::spawn(move || {
 				let mut a = test.lock();
+				// println!("ticket num: {}, thread num: {}, val: {}", a.lock.current.load(Ordering::Acquire), test.lock.current.load(Ordering::Acquire), x);
 				a.push(x);
-				a.unlock();	
+				a.unlock();
 			})
-	})
-	.map(|x| {
-		x.join()
 	}).collect();
+
+	thread::sleep(Duration::from_millis(2000));
     
 	println!("{:?}", *test.lock());
 	// done!
