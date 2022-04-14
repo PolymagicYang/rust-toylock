@@ -6,7 +6,6 @@
 //             2. ticket_num => for the ticket num.
 //     when current == ticket_num => thread holds the lock
 //     unlock => (fetch and increment) the current.
-
 use std::{sync::atomic::{AtomicUsize, Ordering}, cell::UnsafeCell, ops::DerefMut, thread::{self, JoinHandle}, time::Duration};
 use core::ops::Deref;
 
@@ -102,6 +101,7 @@ fn test() {
 				let mut a = test.lock();
 				// println!("ticket num: {}, thread num: {}, val: {}", a.lock.current.load(Ordering::Acquire), test.lock.current.load(Ordering::Acquire), x);
 				a.push(x);
+				println!("ok");
 				a.unlock();
 			})
 	}).collect();

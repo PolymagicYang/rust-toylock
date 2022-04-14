@@ -1,6 +1,6 @@
 //! A insufficient lock.
 
-use std::{sync::{atomic::{ AtomicBool, Ordering }, Arc}, ops::{Deref, DerefMut}, cell::UnsafeCell};
+use std::{sync::{atomic::{ AtomicBool, Ordering }}, ops::{Deref, DerefMut}, cell::UnsafeCell};
 
 // 自旋锁：持有锁的线程不断查看是否有其他线程在使用锁。
 

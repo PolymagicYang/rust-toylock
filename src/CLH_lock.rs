@@ -126,7 +126,7 @@ fn test() {
 #[test]
 fn test1() {
     let test: &'static CLHLock<Vec<i32>> = Box::leak(Box::new(CLHLock::new(vec![])));
-	let joins: Vec<_> = (1..100)
+	let _joins: Vec<_> = (1..100)
 		.map(|x| {
 			thread::spawn(move || {
 				let mut a = test.lock();
