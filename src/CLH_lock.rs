@@ -57,6 +57,7 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr = unsafe { Box::from_raw(self.lock) };
         curr.is_locked.store(false, Ordering::Release);
+        // Let the next node drop the current node.
         Box::into_raw(curr);
     }
 }
