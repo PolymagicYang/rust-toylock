@@ -1,5 +1,5 @@
 # ToyLocks - Rust   
 
 ### All locks implemented in Rust
-- **Notice**: You can not use these implementations in production.
+- **Notice**: Don't use these implementations in the production environment.
 
