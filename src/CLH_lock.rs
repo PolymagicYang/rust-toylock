@@ -139,3 +139,12 @@ fn test1() {
     // 
     println!("{:?}", *test.lock());
 }
+
+#[test]
+fn test_2() {
+    let a = thread::spawn(move || { 
+        thread::park();
+        println!("Hello!");
+    });
+    a.thread().unpark();
+}
