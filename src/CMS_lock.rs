@@ -63,7 +63,7 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
 
 impl<'a, T: Send + Sync> Guard for LockGuard<T> {
     fn unlock(&self) {
-
+        let curr = unsafe { Box::from_raw(self.lock) };
     }
 }
 
