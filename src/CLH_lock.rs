@@ -1,5 +1,6 @@
 //! A linked-list like lock. 
 
+use backoff;
 use crate::{Lock, Guard};
 use std::{sync::atomic::{ AtomicBool, AtomicPtr, Ordering }, cell::UnsafeCell, thread, ops::{Deref, DerefMut}, time::Duration};
 /// A CLH lock consists of many nodes linearly linked together. 
@@ -73,6 +74,7 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
         while prev.is_locked.load(Ordering::Acquire) {
             // Make sure previous node's lock is released.
             // Ordering::Acquire is required after other threads release the lock and change the value in node.
+            backoff::ExponentialBackoff::default(); 
         }
         
         // Let the current node cleanup the previous node.
