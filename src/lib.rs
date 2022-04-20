@@ -11,6 +11,6 @@ trait Guard {
 trait Lock<'a, T: Send + Sync> {
     type L: Guard;
     
-    // fn lock(&'a self) -> Self::L;
-    fn lock(&self) -> Self::L;
+    // fn lock(&self) -> Self::L;
+    fn lock(&'a self) -> Self::L;
 }
