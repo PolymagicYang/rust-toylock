@@ -1,5 +1,5 @@
 //! A LinkedList-like locks queue which is similar to CLH Lock but more efficient.
-use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}};
+use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}, marker, ptr};
 use backoff;
 use crate::{Lock, Guard};
 
@@ -26,13 +26,27 @@ pub struct CmsLock<T: Send + Sync> {
     data: UnsafeCell<T>,
 }
 
-pub struct LockGuard<T: Send + Sync> {
+pub struct LockGuard<'a, T: 'a + Send + Sync> {
     data: *mut T,    
     lock: *mut Node,
+    _lock_marker: marker::PhantomData<Node>,
+    _data_marker: marker::PhantomData<&'a T>,
+}
+
+impl<'a, T> Drop for LockGuard<'a, T>
+where 
+    T: Send + Sync
+{
+    fn drop(&mut self) {
+        self.unlock();
+        unsafe {
+            ptr::drop_in_place(self.lock);
+        };
+    } 
 }
 
 impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
-    type L = LockGuard<T>;
+    type L = LockGuard<'a, T>;
 
     fn lock(&self) -> Self::L {
         let curr = Box::into_raw(Box::new(Some(Node::new())));
@@ -57,13 +71,14 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
         LockGuard {
             data: self.data.get(), 
             lock: Box::into_raw(Box::new(curr.unwrap())),
+            _data_marker: Default::default(),
+            _lock_marker: Default::default(),
         }
     }
 }
 
-impl<'a, T: Send + Sync> Guard for LockGuard<T> {
+impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr = unsafe { Box::from_raw(self.lock) };
     }
 }
-
