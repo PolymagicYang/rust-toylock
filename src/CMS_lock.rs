@@ -48,7 +48,7 @@ where
 impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
     type L = LockGuard<'a, T>;
 
-    fn lock(&self) -> Self::L {
+    fn lock(&'a self) -> Self::L {
         let curr = Box::into_raw(Box::new(Some(Node::new())));
         let prev = unsafe { 
             Box::from_raw(self.node.swap(curr, Ordering::Relaxed)) 
