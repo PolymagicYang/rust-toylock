@@ -1,5 +1,5 @@
 //! A LinkedList-like locks queue which is similar to CLH Lock but more efficient.
-use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}, marker, ptr};
+use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}, marker};
 use crate::{Lock, Guard};
 
 pub struct Node {
@@ -87,11 +87,12 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
             match next {
                 Some(next_node) => {
                     next_node.is_locked.store(false, Ordering::Release);
+                    unsafe { Box::from_raw(curr_ptr) };
                     return
-                } 
+                }, 
                 None => {
-                    todo!("checking Ordering.");
                     if self.lock.compare_exchange(curr_ptr, new_node, Ordering::Release, Ordering::Relaxed).is_ok() {
+                        unsafe { Box::from_raw(curr_ptr) };
                         return 
                     }
                 } 
@@ -99,6 +100,5 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
         }
         
         // drops the current node.
-        unsafe { Box::from_raw(curr_ptr) };
     }
 }
