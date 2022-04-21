@@ -27,7 +27,7 @@ pub struct CmsLock<T: Send + Sync> {
 
 pub struct LockGuard<'a, T: 'a + Send + Sync> {
     data: *mut T,    
-    lock: &'a AtomicPtr<Option<Node>>,
+    lock: AtomicPtr<Option<Node>>,
     _marker: marker::PhantomData<&'a T>,
 }
 
@@ -65,7 +65,7 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
 
         LockGuard {
             data: self.data.get(), 
-            lock: &self.node,
+            lock: AtomicPtr::new(Box::into_raw(curr)),
             _marker: Default::default(),
         }
     }
@@ -73,17 +73,32 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
 
 impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
     fn unlock(&self) {
+        let curr_ptr = self.lock.load(Ordering::Acquire);
         let curr = unsafe {
-            &*self.lock.load(Ordering::Acquire)
+            &*curr_ptr
         }.as_ref().unwrap();
        
         let next = unsafe {
             &*curr.next.load(Ordering::Acquire)
         };
+        let new_node = Box::into_raw(Box::new(None));
         
-        match next {
-            Some(next_node) => todo!("drop current node and make next node free."),
-            None => todo!("compare and exchange to mitigate the dirty read."),
+        loop {
+            match next {
+                Some(next_node) => {
+                    next_node.is_locked.store(false, Ordering::Release);
+                    return
+                } 
+                None => {
+                    todo!("checking Ordering.");
+                    if self.lock.compare_exchange(curr_ptr, new_node, Ordering::Release, Ordering::Relaxed).is_ok() {
+                        return 
+                    }
+                } 
+            }
         }
+        
+        // drops the current node.
+        unsafe { Box::from_raw(curr_ptr) };
     }
 }
