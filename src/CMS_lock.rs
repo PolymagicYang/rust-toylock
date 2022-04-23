@@ -46,7 +46,8 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
     fn lock(&'a self) -> Self::L {
         let curr = Box::into_raw(Box::new(Some(Node::new())));
         let prev = unsafe { 
-            Box::from_raw(self.node.swap(curr, Ordering::Relaxed)) 
+            // AcqRel: make sure the load and store is updated.
+            Box::from_raw(self.node.swap(curr, Ordering::AcqRel)) 
         };
         
         // put the current node into the context.

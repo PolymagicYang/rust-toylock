@@ -68,7 +68,7 @@ impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
     fn lock(&self) -> Self::L {
         let curr = Box::into_raw(Box::new(Node::default()));
         // Ordering relaxed is accepable, because read-modify-write is message adjancy operation.
-        let prev_ptr = self.prev.swap(curr, Ordering::Relaxed);
+        let prev_ptr = self.prev.swap(curr, Ordering::AcqRel);
 
         let prev = unsafe { Box::from_raw(prev_ptr) };
         while prev.is_locked.load(Ordering::Acquire) {
