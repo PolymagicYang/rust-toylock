@@ -10,9 +10,9 @@ pub mod CMS_lock;
 pub mod list;
 
 /// Use RAII to protect data inside the box. 
-pub trait Guard: Deref
+pub trait Guard<T>: Deref<Target = T>
 where 
-    Self::Target: Sized + Send + Sync
+    T: Send + Sync + Sized
 {
     fn unlock(&self);
 }
@@ -21,7 +21,7 @@ pub trait Lock<'a, T>
 where 
     T: Send + Sync + Sized
 {
-    type G: Guard;
+    type G: Guard<T>;
     
     // fn lock(&self) -> Self::L;
     fn lock(&'a self) -> Self::G;
