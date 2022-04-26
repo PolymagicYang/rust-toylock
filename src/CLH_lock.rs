@@ -54,7 +54,7 @@ impl<'a, T: Send + Sync> LockGuard<'a, T> {
     }
 }
 
-impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
+impl<'a, T: Send + Sync> Guard<T> for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr = unsafe { Box::from_raw(self.lock) };
         curr.is_locked.store(false, Ordering::Release);
@@ -64,8 +64,8 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
 }
 
 impl<'a, T: 'a + Send + Sync> Lock<'a, T> for CLHLock<T> {
-    type L = LockGuard<'a, T>;
-    fn lock(&self) -> Self::L {
+    type G = LockGuard<'a, T>;
+    fn lock(&self) -> Self::G {
         let curr = Box::into_raw(Box::new(Node::default()));
         // Ordering relaxed is accepable, because read-modify-write is message adjancy operation.
         let prev_ptr = self.prev.swap(curr, Ordering::AcqRel);

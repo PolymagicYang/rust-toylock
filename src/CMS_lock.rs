@@ -1,7 +1,8 @@
 //! A LinkedList-like locks queue which is similar to CLH Lock but more efficient.
-use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}, marker};
+use std::{cell::UnsafeCell, sync::atomic::{AtomicPtr, AtomicBool, Ordering}, marker, ops::Deref};
 use crate::{Lock, Guard};
 
+#[derive(Debug, Default)]
 pub struct Node {
     is_locked: AtomicBool,
     next: AtomicPtr<Option<Node>>,    
@@ -20,11 +21,13 @@ impl Node {
 /// A CMS Lock is similar to CLH_lock [crate::CLH_lock], but has some differencies.
 /// 1. CMS lock is cache-friendly because every CMS lock's node releases itself instead of releasing previous nodes.
 /// 2. CMS lock is more efficient in the NUMA system.
+#[derive(Debug, Default)]
 pub struct CmsLock<T: Send + Sync> {
     node: AtomicPtr<Option<Node>>,
     data: UnsafeCell<T>,
 }
 
+#[derive(Debug)]
 pub struct LockGuard<'a, T: 'a + Send + Sync> {
     data: *mut T,    
     lock: AtomicPtr<Option<Node>>,
@@ -41,9 +44,9 @@ where
 }
 
 impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
-    type L = LockGuard<'a, T>;
+    type G = LockGuard<'a, T>;
 
-    fn lock(&'a self) -> Self::L {
+    fn lock(&'a self) -> Self::G {
         let curr = Box::into_raw(Box::new(Some(Node::new())));
         let prev = unsafe { 
             // AcqRel: make sure the load and store is updated.
@@ -72,7 +75,17 @@ impl<'a, T: Send + Sync + 'a> Lock<'a, T> for CmsLock<T> {
     }
 }
 
-impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
+impl<'a, T> Deref for LockGuard<'a, T>
+where
+    T: Send + Sync
+{
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data }
+    }
+}
+
+impl<'a, T: Send + Sync> Guard<T> for LockGuard<'a, T> {
     fn unlock(&self) {
         let curr_ptr = self.lock.load(Ordering::Acquire);
         let curr = unsafe {
@@ -102,4 +115,5 @@ impl<'a, T: Send + Sync> Guard for LockGuard<'a, T> {
         
         // drops the current node.
     }
+
 }
